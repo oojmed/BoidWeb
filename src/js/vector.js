@@ -56,6 +56,19 @@ export class Vector {
     return this.x * vec.x + this.y * vec.y;
   }
 
+  rotate(rad) {
+    let cs = Math.cos(rad);
+    let sn = Math.sin(rad);
+
+    let px = this.x * cs - this.y * sn;
+    let py = this.x * sn + this.y * cs;
+
+    this.x = px;
+    this.y = py;
+
+    return this;
+  }
+
   isZero() {
     return this.x === 0 && this.y === 0;
   }
