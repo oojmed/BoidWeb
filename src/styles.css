@@ -23,7 +23,8 @@ body > canvas {
 }
 
 #offscreenCanvas {
-    display: none;
+    z-index: -1;
+    /* display: none; */
 }
 
 #settings {

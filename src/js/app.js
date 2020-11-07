@@ -63,7 +63,7 @@ function scaleCanvas() {
     c.style.height = `${height}px`;
   }
 
-  generateMap();
+  // generateMap();
 }
 
 scaleCanvas();
@@ -78,7 +78,7 @@ function mouseMoveHandler(e) {
   mouseVector.x = e.clientX;
   mouseVector.y = e.clientY;
 
-  if (mouseState === 1) {
+  /*if (mouseState === 1) {
     for (let y = mouseVector.y - mouseDrawSize; y < mouseVector.y + mouseDrawSize; y++) {
       for (let x = mouseVector.x - mouseDrawSize; x < mouseVector.x + mouseDrawSize; x++) {
         map[y][x] = 1;
@@ -92,12 +92,13 @@ function mouseMoveHandler(e) {
     }
 
     //generateMapPixels();
-  }
+  }*/
 
   //console.log(mouseVector);
 }
 
 function mouseDownHandler(e) {
+  console.log(e.which);
   mouseState = e.which;
 }
 
@@ -119,12 +120,30 @@ let templateBoid = {
   position: new Vector(),
   velocity: new Vector(),
 
-  last: []
+  last: [],
+  color: 'rgb(0, 0, 0)',
+
+  lastLaser: 0,
+  health: 100
 };
 
-let boidCount = 1;
+let templateLaser = {
+  position: new Vector(),
+  velocity: new Vector(),
 
-let boids = [];
+  color: 'red',
+  age: 0
+};
+
+let boidCount = 30;
+
+let groups = [[], []];
+let groupColors = [
+  '#D90368',
+  '#FFD400'
+];
+
+let lasers = [];
 
 let flockmateRadius = 90,
     separationDistance = 60,
@@ -143,15 +162,23 @@ let ruleForces = [
 generateBoids();
 
 function generateBoids() {
-  if (boids.length > boidCount) {
-    boids.splice(0, boids.length - boidCount);
-  }
+  let g = 0;
 
-  for (let i = Number(boids.length); i < boidCount; i++) {
-    boids.push(Object.assign({}, templateBoid));
+  for (let boids of groups) {
+    if (boids.length > boidCount) {
+      boids.splice(0, boids.length - boidCount);
+    }
+
+    for (let i = Number(boids.length); i < boidCount; i++) {
+      boids.push(Object.assign({}, templateBoid));
   
-    boids[i].position = new Vector(Math.random() * width, Math.random() * height);
-    boids[i].velocity = new Vector(1 - Math.random() * 2, 1 - Math.random() * 2).scale(maxVelocity);
+      boids[i].position = new Vector(Math.random() * width, Math.random() * height);
+      boids[i].velocity = new Vector(1 - Math.random() * 2, 1 - Math.random() * 2).scale(maxVelocity);
+
+      boids[i].color = groupColors[g];
+    }
+
+    g++;
   }
 }
 
@@ -161,8 +188,6 @@ elBoidCount.oninput = () => {
   boidCount = parseInt(elBoidCount.value);
   generateBoids();
 };
-
-offscreenCtx.globalAlpha = 0.85;
 
 function raycast(_directionVector, _origin, distance) {
   let directionVector = _directionVector.clone().scaleTo(1);
@@ -193,13 +218,19 @@ function raycast(_directionVector, _origin, distance) {
 
 let turnSpeed = 0.08;
 
+let fpsEl = document.getElementById('fps');
+
 async function update() {
   let timeNow = performance.now();
   let deltaTime = (timeNow - lastUpdateTime) / 1000;
   lastUpdateTime = timeNow;
 
   fpsArr.push(Math.round(1 / deltaTime));
-  if (fpsArr.length > 10) fpsArr.shift();
+  if (fpsArr.length > 100) fpsArr.shift();
+
+  fpsEl.textContent = mean(fpsArr).toFixed(0);
+
+  offscreenCtx.globalAlpha = 0.8;
 
   offscreenCtx.clearRect(0, 0, width, height);
   offscreenCtx.drawImage(canvas, 0, 0, width, height);
@@ -207,14 +238,18 @@ async function update() {
   ctx.clearRect(0, 0, width, height);
   ctx.drawImage(offscreenCanvas, 0, 0, width, height);
 
-  ctx.putImageData(mapImgData, 0, 0);
+  // ctx.putImageData(mapImgData, 0, 0);
 
+  let g = -1;
+
+  for (let boids of groups) {
+  g++;
   for (let b of boids) {
-    let rayFront = raycast(b.velocity, b.position, 40);
+    /*let rayFront = raycast(b.velocity, b.position, 40);
     
     let rayLeft = raycast(b.velocity.clone().rotate(-0.75), b.position, 40);
     let rayRight = raycast(b.velocity.clone().rotate(0.75), b.position, 40);
- 
+
     if (rayFront) {
       if (rayLeft) {
         b.velocity.rotate(turnSpeed); // Turn right
@@ -231,7 +266,7 @@ async function update() {
       } else if (rayRight) {
         b.velocity.rotate(-turnSpeed); // Turn left
       }
-    }
+    }*/
 
     //if (wallInfront !== false) {
       //console.log(wallInfront);
@@ -259,6 +294,56 @@ async function update() {
       }
     }
 
+    if (b.lastLaser > 300) {
+      let closestDist = 999;
+      let closest;
+
+      let group = groups[groups.length - g - 1];
+
+      for (let en of group) {
+        let diff = en.position.clone().sub(b.position);
+        let dist = diff.length();
+
+        if (closestDist > dist) {
+          closestDist = dist;
+          closest = [en, diff];
+        }
+      }
+
+      let en = closest[0];
+      let diff = closest[1];
+
+      if (diff.length() < 100) {
+        ctx.strokeStyle = `#00${b.color.substring(3)}`;
+
+        ctx.beginPath();
+      
+        ctx.moveTo(b.position.x, b.position.y);
+        ctx.lineTo(en.position.x, en.position.y);
+
+        ctx.stroke();
+
+        en.health -= 1;
+
+        if (en.health < 0) {
+          group.splice(group.indexOf(en), 1);
+        }
+      }
+
+      /*if (closest.length() < 30) {
+        let l = Object.assign({}, templateLaser);
+        l.position = b.position.clone();
+        l.velocity = closest;
+        l.color = `${b.color.substring(0, b.color.length - 2)}FF`;
+
+        lasers.push(l);
+
+        b.lastLaser = 0;
+      }*/
+    } else {
+      b.lastLaser += Math.random() * 100;
+    }
+
     let forces = [alignment, cohesion, separation];
 
     //console.log(alignment.clone().scaleTo(maxVelocity));
@@ -271,10 +356,10 @@ async function update() {
       }
     }
 
-    if (mouseState === 3) {
+    if (mouseState !== 0) {
       let diff = b.position.clone().sub(mouseVector.clone()).truncate(mouseForce);
 
-      b.acceleration.sub(diff);
+      b.acceleration[mouseState === 1 ? 'sub' : 'add'](diff);
     }
 
     /*b.last.push(b.acceleration.length() / (alignmentForce + cohesionForce + separationForce));
@@ -282,9 +367,9 @@ async function update() {
     if (b.last.length > 20) {
       b.last.shift();
     }*/
-  }
+  //}
 
-  for (let b of boids) {
+  //for (let b of boids) {
     b.position.add(b.velocity.add(b.acceleration).truncate(maxVelocity));
 
     if (b.position.y > height) {
@@ -299,7 +384,7 @@ async function update() {
       b.position.x += width;
     }
 
-    let color = 'rgb(242, 69, 145)'; //colors[Math.floor(mean(b.last) * 100)];
+    let color = b.color; // 'rgb(242, 69, 145)'; //colors[Math.floor(mean(b.last) * 100)];
     //console.log(color);
     //let colorSplit = color.replace('rgb(', '').replace(')', '').split(', ').map((x) => parseInt(x));
 
@@ -316,19 +401,35 @@ async function update() {
     ctx.arc(b.position.x, b.position.y, 2, 0, 2 * Math.PI);
     ctx.fill();
 
-    if (!b.acceleration.isZero()) drawTriangleFromVector(b.position.x, b.position.y, b.acceleration, 'rgba(255, 0, 0, .8)', 20);
+    const useVelocity = b.acceleration.isZero();
+    //drawTriangleFromVector(b.position.x, b.position.y, useVelocity ? b.velocity : b.acceleration, useVelocity ? 'rgba(0, 255, 0, .8)' : 'rgba(255, 0, 0, .8)', 20);
+  }
+}
+
+  for (let l of lasers) {
+    l.position.add(l.velocity.truncate(maxVelocity * 2));
+
+    drawTriangleFromVector(l.position.x, l.position.y, l.velocity, l.color, -(triangleVectorSize / 2), 0);
+
+    l.age++;
+
+    if (l.age > 30) {
+      lasers.splice(lasers.indexOf(l), 1);
+    }
   }
 
-  if (mouseState === 3) for (let i = 0; i < mouseArrows; i++) {
+  if (mouseState !== 0) for (let i = 0; i < mouseArrows; i++) {
     let vec = new Vector(Math.cos(2 * Math.PI * i / mouseArrows), Math.sin(2 * Math.PI * i / mouseArrows));
-    drawTriangleFromVector(mouseVector.x, mouseVector.y, vec, 'blue', -mouseSpacing, 3.14159);
-    //drawTriangleFromVector(mouseVector.x, mouseVector.y, vec, mouseState === 1 ? 'blue' : 'red', mouseState === 1 ? -mouseSpacing : (mouseSpacing / 1.5), 3.14159);
+    // drawTriangleFromVector(mouseVector.x, mouseVector.y, vec, 'blue', -mouseSpacing, 3.14159);
+    drawTriangleFromVector(mouseVector.x, mouseVector.y, vec, mouseState === 1 ? 'blue' : 'red', mouseState === 1 ? -mouseSpacing : (mouseSpacing / 1.5), 3.14159);
   }
 
   frame++;
 
   requestAnimationFrame(update);
 }
+
+window._lasers = lasers;
 
 let mouseArrows = 5;
 let mouseSpacing = 65;
